@@ -1,0 +1,129 @@
+
+//A4 (SDA) SDA del Si5351 
+//A5 (SCL) SCL del Si5351 
+#include "si5351.h"
+#include <Wire.h>
+Si5351 si5351;
+
+const int pwmPin = 3; //pwm per modulare 
+
+enum StatoSistema {HOME, SET_RF, SET_PWM, TX_RF};
+StatoSistema statoAttuale = HOME ;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+  delay(500);
+
+  Serial.print(F("Iniz. Radio... "));
+  bool i2c_found = si5351.init(SI5351_CRYSTAL_LOAD_10PF, 0, 0);
+  
+  if (!i2c_found) {
+    Serial.println("Err: Si5351 non trovato");
+    while (1); // Blocca se chippino non risponde
+  }
+
+  //  potenza di uscita (2mA, 4mA, 6mA o 8mA)
+  // 2mA è di default ed è più pulito per esperimenti RF vicini
+  si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+  delay(100);
+  Serial.println("OK");
+  mostraMenu();
+}
+
+void loop() {
+  
+    if (Serial.available() > 0 ) {
+        char c = Serial.read();
+        if (c >= '1' && c <= '3') {
+            if (c == '1') statoAttuale = SET_RF;
+            else if (c == '2') statoAttuale = SET_PWM;
+            else if (c == '3') statoAttuale = TX_RF;
+           
+            eseguiAzione();
+        }
+    }
+}
+void mostraMenu() {
+    Serial.println("[1]SET_RX , [2]SET_PWM "); 
+    }
+void eseguiAzione() {
+    switch (statoAttuale) {
+        case SET_RF:
+        // 1. Pulizia buffer iniziale per eliminare l' '1' premuto prima
+        delay(100); 
+        while(Serial.available() > 0) Serial.read(); 
+
+        Serial.println(F("\n[RADIO] Inserisci frequenza in kHz (es. 800):"));
+    
+        long freqTargetKHz = 0;
+
+        // 2. Ciclo di attesa 
+        while (freqTargetKHz <= 0) {
+            if (Serial.available() > 0) {
+                freqTargetKHz = Serial.parseInt();
+            
+            // Se l'utente preme invio a vuoto o parseInt fallisce (0)
+            // il ciclo while ricomincia e aspetta ancora.
+             }
+        }
+
+        // 3. Controllo Range
+        if (freqTargetKHz < 8 || freqTargetKHz > 160000) {
+            Serial.println(F("Err: Frequenza fuori range (8kHz-160MHz)."));
+            statoAttuale = HOME;
+            break;
+        }
+
+        // --- CONFIGURAZIONE ETHERKIT ---freq in centesimi di Hertz
+         unsigned long long freqFinal = (unsigned long long)freqTargetKHz * 100000ULL;
+         si5351.set_freq(freqFinal, SI5351_CLK0);
+        si5351.output_enable(SI5351_CLK0, 1);
+    
+        Serial.print(F("TX ON: ")); Serial.print(freqTargetKHz); 
+        Serial.println(F(" kHz. 'X' per stop."));
+
+        // --- CICLO MODULAZIONE TONI ---
+         bool continuaTX = true;
+         while(continuaTX) {
+            int toni[] = {440, 660, 880, 1200};
+            for (int i = 0; i < 4; i++) {
+                tone(pwmPin, toni[i]);
+                unsigned long startMillis = millis();
+                while(millis() - startMillis < 300) {
+                    if (Serial.available() > 0) {
+                        char esc = toupper(Serial.read()); // toupper accetta sia 'x' che 'X'
+                        if (esc == 'X' || esc == '6') {
+                        continuaTX = false;
+                        break;
+                        }
+                    }
+                }
+              if (!continuaTX) break;
+             }
+         }
+    
+         noTone(pwmPin);
+        si5351.output_enable(SI5351_CLK0, 0);
+         Serial.println(F("[RADIO] OFF"));
+        statoAttuale = HOME;
+        mostraMenu(); 
+        break;
+   
+
+        case SET_PWM: 
+
+
+             
+            break;
+        case TX_RF: 
+             
+            break;
+      }
+}
+  
+
+
+
+
+
