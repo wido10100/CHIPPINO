@@ -7,8 +7,16 @@ Si5351 si5351;
 
 const int pwmPin = 3; //pwm per modulare 
 
-enum StatoSistema {HOME, SET_RF, SET_PWM, TX_RF};
-StatoSistema statoAttuale = HOME ;
+
+//enum StatoSistema {HOME, SET_RF, SET_PWM, TX_RF}; // bella invece che #define , semantica tipata, scolastica 
+//StatoSistema statoAttuale = HOME ;                
+// alternativa c
+#define HOME '0';
+#define SET_RF '1';
+#define SET_PWM '2';
+#define TX_RF '3';
+
+
 
 void setup() {
   Serial.begin(9600);
@@ -16,11 +24,12 @@ void setup() {
   delay(500);
 
   Serial.print(F("Iniz. Radio... "));
-  bool i2c_found = si5351.init(SI5351_CRYSTAL_LOAD_10PF, 0, 0);
-  
-  if (!i2c_found) {
-    Serial.println("Err: Si5351 non trovato");
-    while (1); // Blocca se chippino non risponde
+
+  if (si5351.init(SI5351_CRYSTAL_LOAD_10PF, 0, 0)) {
+      Serial.println("OK: Si5351 inizializzato");
+  } else {
+      Serial.println("Err: Si5351 non trovato _STOP_");
+      while (1); // Blocca se chippino non risponde
   }
 
   //  potenza di uscita (2mA, 4mA, 6mA o 8mA)
@@ -28,35 +37,38 @@ void setup() {
   si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
   delay(100);
   Serial.println("OK");
+  
   mostraMenu();
 }
 
+void mostraMenu() {
+    Serial.println("[1]SET_RF , [2]SET_PWM ");  // qui si drovrebbe usare la struttura enum dichiarata scolastimente per un motivo eheh
+  
+}
+
+
 
 void loop() {
+  
+  // legge da serial comandi menu
     if (Serial.available() > 0 ) {
-        char c = Serial.read();
-        if (c >= '1' && c <= '3') {
-            if (c == '1') statoAttuale = SET_RF;
-            else if (c == '2') statoAttuale = SET_PWM;
-            else if (c == '3') statoAttuale = TX_RF;
-           
-            eseguiAzione();
-        }
+      
+      eseguiAzione(Serial.read());
+    
+    } else { 
+        // panic
+      // usiamo il led col codice morse?
     }
 }
 
 
-void mostraMenu() {
-    Serial.println("[1]SET_RX , [2]SET_PWM "); 
-}
 
-
-void eseguiAzione() {
+void eseguiAzione(char statoAttuale) {
     switch (statoAttuale) {
-        case SET_RF:
+        case '1': //SET_RF
             // 1. Pulizia buffer iniziale per eliminare l' '1' premuto prima
             delay(100); 
-            while(Serial.available() > 0) Serial.read(); 
+            while(Serial.available() > 0) Serial.read(); // questo cosa fa? svuota il buffer di caratteri successivi//
 
             Serial.println(F("\n[RADIO] Inserisci frequenza in kHz (es. 800):"));
     
@@ -117,10 +129,10 @@ void eseguiAzione() {
             break;
    
 
-        case SET_PWM: 
+        case '2': //SET_PWM: 
              
             break;
-        case TX_RF: 
+        case '3': //TX_RF: 
              
             break;
       } // end switch case
